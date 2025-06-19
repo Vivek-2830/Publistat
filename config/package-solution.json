@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "publistat-news-client-side-solution",
+    "id": "581f76fd-3d59-4d5f-803e-1a1cebded133",
+    "version": "1.0.0.7",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.14.0"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "publistat-news description"
+      },
+      "longDescription": {
+        "default": "publistat-news description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "publistat-news Feature",
+        "description": "The feature that activates elements of the publistat-news solution.",
+        "id": "ba817be8-7f12-4b09-af4b-2270434a434b",
+        "version": "1.0.0.2"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/publistat-news.sppkg"
+  }
+}

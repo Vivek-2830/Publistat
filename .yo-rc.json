@@ -1,0 +1,16 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "plusBeta": false,
+    "isCreatingSolution": false,
+    "version": "1.14.0",
+    "libraryName": "publistat-news",
+    "libraryId": "581f76fd-3d59-4d5f-803e-1a1cebded133",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "publistat-news",
+    "solutionShortDescription": "publistat-news description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}
