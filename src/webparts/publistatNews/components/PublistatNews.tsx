@@ -9,8 +9,7 @@ import * as Excel from 'exceljs';
 import { saveAs } from 'file-saver';
 import { SPHttpClient, SPHttpClientResponse, ISPHttpClientOptions, IHttpClientOptions, HttpClient } from '@microsoft/sp-http';
 import * as Chart from "../assets/js/Chart.min.js";
-// import "@pnp/sp/lists";
-// import "@pnp/sp/webs"
+
 require('../assets/css/fabric.min.css');
 require('../assets/css/style.css');
 
@@ -40,10 +39,13 @@ export interface IPublistatNewsState {
   EmailSuccessDialog: boolean;
   SubscribedNewsCount: any;
   ShowMoreNews: boolean;
-  hasMoreNews : boolean;
-  position : number;
-  totalCount : number;
-  
+  hasMoreNews: boolean;
+  position: number;
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+  skipCount : number;
+  totalItemCount : number;
 }
 
 let ctx;
@@ -160,7 +162,11 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
       ShowMoreNews: true,
       hasMoreNews: true,
       position: 0,
-      totalCount: 0
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: 1,
+      skipCount : 0,
+      totalItemCount : 0
     };
 
   }
@@ -217,16 +223,15 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
                   }
                   ))
               }
-              {this.state.MyNews.length > 0 && this.state.ShowMoreNews == true ?
+
+              {this.state.hasMoreNews && (
                 <div className='MoreButton'>
                   <PrimaryButton
                     text='Show More News'
-                    onClick={()  => this.GetNews()}
+                    onClick={() => this.GetNews(true)}
                   />
                 </div>
-                :
-                <>
-                </>
+              )
               }
             </div>
 
@@ -459,7 +464,7 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
         this.setState({ MySubscribedTags: tags });
         console.log(this.state.MySubscribedTags);
 
-        this.GetNews();
+        this.GetNews(false);
 
       }
       )
@@ -1126,45 +1131,60 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
   //   }
 
   public async GetNews(loadMore: boolean = false) {
-
     try {
-
       let { AllNews, position } = this.state;
       const pageSize = 20;
-  
+
       // Reset if fresh load
       if (!loadMore) {
         AllNews = [];
         position = 0;
       }
-  
-      // ✅ Get total count only once (on first load)
-      let totalCount = this.state.totalCount;
+
+       let totalCount = this.state.totalCount;
       if (!totalCount || !loadMore) {
-        // totalCount = await sp.web.lists.getByTitle("News").items.getCount();
-         totalCount = await sp.web.lists.getByTitle("News").get();
+        const list = sp.web.lists.getByTitle("News");
+        const total = await list.get().then(l => l.ItemCount);
+      this.setState({ totalCount : total });
+
       }
-  
-      // Fetch next batch
-      const items = await sp.web.lists
+
+let items;
+      if(loadMore){
+         items = await sp.web.lists
         .getByTitle("News")
-        .items
-        .select(
-          'Id','Title','Link','Pubdate','Description','Date','Source','Newsgroup',
-          'Category','Newsguid','ENTitle','ENDescription','Sentiment','Reach',
-          'Topic','Spokesperson','Stakeholder','ArticleText','MediaType',
-          'Region','PublicationTime','PageNumber','Other'
+        .items.select(
+          "Id", "Title", "Link", "Pubdate", "Description", "Date", "Source", "Newsgroup",
+          "Category", "Newsguid", "ENTitle", "ENDescription", "Sentiment", "Reach",
+          "Topic", "Spokesperson", "Stakeholder", "ArticleText", "MediaType",
+          "Region", "PublicationTime", "PageNumber", "Other"
         )
-        .orderBy('Created', false)
+        .orderBy("Created", false)
         .top(pageSize)
         .skip(position)
-        .get();
-  
-      console.log(`Fetched ${items.length} items from position ${position}`);
-  
-      // Map SP items → app data
-      const mapped = items.map(item => ({
-        ID: item.Id || "",
+        .getPaged();
+      }
+      else{
+         items = await sp.web.lists
+        .getByTitle("News")
+        .items.select(
+          "Id", "Title", "Link", "Pubdate", "Description", "Date", "Source", "Newsgroup",
+          "Category", "Newsguid", "ENTitle", "ENDescription", "Sentiment", "Reach",
+          "Topic", "Spokesperson", "Stakeholder", "ArticleText", "MediaType",
+          "Region", "PublicationTime", "PageNumber", "Other"
+        )
+        .orderBy("Created", false)
+        .top(pageSize)
+        .getPaged();
+      }
+      // ✅ Fetch next batch
+      
+
+      // console.log(`Fetched ${items.length} items from position ${position}`);
+
+      // ✅ Map SP items → app data
+      const mapped = items.results.map(item => ({
+        Id: item.Id || "",
         Title: item.Title || "",
         Link: item.Link || "",
         Pubdate: item.Pubdate ? new Date(item.Pubdate).toISOString().split("T")[0] : "",
@@ -1187,179 +1207,184 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
         PageNumber: item.PageNumber || "",
         Other: item.Other || "",
       }));
-  
+
+      console.log("Mapped items count:", mapped.length);
+
       // Append new batch
       AllNews = [...AllNews, ...mapped];
 
-        if (items.length > 0) {
-  
+      if (items.results.length > 0) {
+        // ✅ Filtering should use AllNews (latest), not this.state.AllNews
+        const filteredData = AllNews.filter(x => {
+          const fields = {
+            title: x.Title,
+            description: x.Description,
+            category: x.Category,
+            source: x.Source,
+            newsgroup: x.Newsgroup,
+            entitle: x.ENTitle,
+            endescription: x.ENDescription,
+            Sentiment: x.Sentiment.toLowerCase(),
+            Reach: x.Reach.toLowerCase(),
+            Topic: x.Topic.toLowerCase(),
+            Spokesperson: x.Spokesperson.toLowerCase(),
+            Stakeholder: x.Stakeholder.toLowerCase(),
+            ArticleText: x.ArticleText.toLowerCase(),
+            MediaType: x.MediaType.toLowerCase(),
+            Region: x.Region.toLowerCase(),
+            PublictionTime: x.PublicationTime.toLowerCase(),
+            PageNumber: x.PageNumber.toLowerCase(),
+            Other: x.Other.toLowerCase(),
+          };
 
-          this.setState({ AllNews: AllNews });
+          const searchableText = Object.values(fields).join(" ");
+          const searchableTextLower = searchableText.toLowerCase();
 
-          const filteredData = this.state.AllNews.filter((x) => {
-            const fields = {
-              title: x.Title,
-              description: x.Description,
-              category: x.Category,
-              source: x.Source,
-              newsgroup: x.Newsgroup,
-              entitle: x.ENTitle,
-              endescription: x.ENDescription,
-              Sentiment: x.Sentiment.toLowerCase(),
-              Reach: x.Reach.toLowerCase(),
-              Topic: x.Topic.toLowerCase(),
-              Spokesperson: x.Spokesperson.toLowerCase(),
-              Stakeholder: x.Stakeholder.toLowerCase(),
-              ArticleText: x.ArticleText.toLowerCase(),
-              MediaType: x.MediaType.toLowerCase(),
-              Region: x.Region.toLowerCase(),
-              PublictionTime: x.PublicationTime.toLowerCase(),
-              PageNumber: x.PageNumber.toLowerCase(),
-              Other: x.Other.toLowerCase(),
+          const matchKeyword = (rawWord: string): boolean => {
+            rawWord = rawWord.trim();
+            let caseSensitive = false;
+
+            if (rawWord.startsWith("CS:")) {
+              caseSensitive = true;
+              rawWord = rawWord.slice(3).trim();
+            }
+
+            const targetText = caseSensitive ? searchableText : searchableTextLower;
+            let word = caseSensitive ? rawWord : rawWord.toLowerCase();
+
+            // Support wildcard at the end like 'binn*'
+            let regex;
+            if (word.endsWith("*")) {
+              const prefix = word.slice(0, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escape special chars
+              regex = new RegExp(`\\b${prefix}\\w*`, caseSensitive ? "" : "i");
+            } else {
+              const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              regex = new RegExp(`\\b${escapedWord}\\b`, caseSensitive ? "" : "i");
+            }
+
+            return regex.test(targetText);
+          };
+
+          const shouldTokenize = (expr: string): boolean => {
+            return /(AND|OR|NOT|\*|CS:)/i.test(expr);
+          };
+
+          const tokenizeExpression = (expr: string): string[] => {
+            const regex = /CS:\s*\w+\*?|\w+\*?|\(|\)|AND|OR|NOT/gi;
+            return [...expr.matchAll(regex)].map(match => match[0].trim());
+          };
+
+
+          const evaluateExpression = (expr: string): boolean => {
+            if (!shouldTokenize(expr)) {
+              // No special syntax detected, just treat as plain keyword match
+              return matchKeyword(expr);
+            }
+
+            const tokens = tokenizeExpression(expr);
+            const precedence: Record<string, number> = {
+              or: 1,
+              and: 2,
+              not: 3
             };
 
-            const searchableText = Object.values(fields).join(" ");
-            const searchableTextLower = searchableText.toLowerCase();
+            const toRPN = (tokens: string[]): string[] => {
+              const output: string[] = [];
+              const operators: string[] = [];
 
-            const matchKeyword = (rawWord: string): boolean => {
-              rawWord = rawWord.trim();
-              let caseSensitive = false;
-
-              if (rawWord.startsWith("CS:")) {
-                caseSensitive = true;
-                rawWord = rawWord.slice(3).trim();
-              }
-
-              const targetText = caseSensitive ? searchableText : searchableTextLower;
-              let word = caseSensitive ? rawWord : rawWord.toLowerCase();
-
-              // Support wildcard at the end like 'binn*'
-              let regex;
-              if (word.endsWith("*")) {
-                const prefix = word.slice(0, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escape special chars
-                regex = new RegExp(`\\b${prefix}\\w*`, caseSensitive ? "" : "i");
-              } else {
-                const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                regex = new RegExp(`\\b${escapedWord}\\b`, caseSensitive ? "" : "i");
-              }
-
-              return regex.test(targetText);
-            };
-
-            const shouldTokenize = (expr: string): boolean => {
-              return /(AND|OR|NOT|\*|CS:)/i.test(expr);
-            };
-
-            const tokenizeExpression = (expr: string): string[] => {
-              const regex = /CS:\s*\w+\*?|\w+\*?|\(|\)|AND|OR|NOT/gi;
-              return [...expr.matchAll(regex)].map(match => match[0].trim());
-            };
-
-
-            const evaluateExpression = (expr: string): boolean => {
-              if (!shouldTokenize(expr)) {
-                // No special syntax detected, just treat as plain keyword match
-                return matchKeyword(expr);
-              }
-
-              const tokens = tokenizeExpression(expr);
-              const precedence: Record<string, number> = {
-                or: 1,
-                and: 2,
-                not: 3
-              };
-
-              const toRPN = (tokens: string[]): string[] => {
-                const output: string[] = [];
-                const operators: string[] = [];
-
-                tokens.forEach(token => {
-                  const lower = token.toLowerCase();
-                  if (["and", "or", "not"].includes(lower)) {
-                    while (
-                      operators.length &&
-                      operators[operators.length - 1] !== "(" &&
-                      precedence[operators[operators.length - 1].toLowerCase()] >= precedence[lower]
-                    ) {
-                      output.push(operators.pop()!);
-                    }
-                    operators.push(token);
-                  } else if (token === "(") {
-                    operators.push(token);
-                  } else if (token === ")") {
-                    while (operators.length && operators[operators.length - 1] !== "(") {
-                      output.push(operators.pop()!);
-                    }
-                    operators.pop(); // remove "("
-                  } else {
-                    output.push(token);
+              tokens.forEach(token => {
+                const lower = token.toLowerCase();
+                if (["and", "or", "not"].includes(lower)) {
+                  while (
+                    operators.length &&
+                    operators[operators.length - 1] !== "(" &&
+                    precedence[operators[operators.length - 1].toLowerCase()] >= precedence[lower]
+                  ) {
+                    output.push(operators.pop()!);
                   }
-                });
-
-                while (operators.length) {
-                  output.push(operators.pop()!);
+                  operators.push(token);
+                } else if (token === "(") {
+                  operators.push(token);
+                } else if (token === ")") {
+                  while (operators.length && operators[operators.length - 1] !== "(") {
+                    output.push(operators.pop()!);
+                  }
+                  operators.pop(); // remove "("
+                } else {
+                  output.push(token);
                 }
+              });
 
-                return output;
-              };
-
-              const evalRPN = (rpn: string[]): boolean => {
-                const stack: boolean[] = [];
-
-                rpn.forEach(token => {
-                  const lower = token.toLowerCase();
-                  if (lower === "not") {
-                    const val = stack.pop()!;
-                    stack.push(!val);
-                  } else if (lower === "and") {
-                    const b = stack.pop()!;
-                    const a = stack.pop()!;
-                    stack.push(a && b);
-                  } else if (lower === "or") {
-                    const b = stack.pop()!;
-                    const a = stack.pop()!;
-                    stack.push(a || b);
-                  } else {
-                    stack.push(matchKeyword(token));
-                  }
-                });
-
-                return stack[0];
-              };
-
-              const rpn = toRPN(tokens);
-              return evalRPN(rpn);
-            };
-
-            // Now we loop through subscribed tags and apply NOT step-by-step
-            return this.state.MySubscribedTags.some(tagExpr => {
-              // Check if it includes NOT
-              const parts = tagExpr.toLowerCase().split(/\s+not\s+/);
-
-              if (parts.length === 2) {
-                const includeExpr = parts[0].trim();
-                const excludeExpr = parts[1].trim();
-
-                const includeMatch = evaluateExpression(includeExpr);
-                const excludeMatch = evaluateExpression(excludeExpr);
-
-                return includeMatch && !excludeMatch;
+              while (operators.length) {
+                output.push(operators.pop()!);
               }
 
-              // Normal evaluation (no NOT involved)
-              return evaluateExpression(tagExpr);
-            });
+              return output;
+            };
+
+            const evalRPN = (rpn: string[]): boolean => {
+              const stack: boolean[] = [];
+
+              rpn.forEach(token => {
+                const lower = token.toLowerCase();
+                if (lower === "not") {
+                  const val = stack.pop()!;
+                  stack.push(!val);
+                } else if (lower === "and") {
+                  const b = stack.pop()!;
+                  const a = stack.pop()!;
+                  stack.push(a && b);
+                } else if (lower === "or") {
+                  const b = stack.pop()!;
+                  const a = stack.pop()!;
+                  stack.push(a || b);
+                } else {
+                  stack.push(matchKeyword(token));
+                }
+              });
+
+              return stack[0];
+            };
+
+            const rpn = toRPN(tokens);
+            return evalRPN(rpn);
+          };
+
+          // Now we loop through subscribed tags and apply NOT step-by-step
+          return this.state.MySubscribedTags.some(tagExpr => {
+            // Check if it includes NOT
+            const parts = tagExpr.toLowerCase().split(/\s+not\s+/);
+
+            if (parts.length === 2) {
+              const includeExpr = parts[0].trim();
+              const excludeExpr = parts[1].trim();
+
+              const includeMatch = evaluateExpression(includeExpr);
+              const excludeMatch = evaluateExpression(excludeExpr);
+
+              return includeMatch && !excludeMatch;
+            }
+
+            // Normal evaluation (no NOT involved)
+            return evaluateExpression(tagExpr);
           });
-          this.setState({ MyNews: filteredData, MyNewsFilterData: filteredData });
-          this.setState({ ExportData: filteredData, FilteredExportData: filteredData });
+        });
 
-          await this.GetNewsGraph();
-        }
-      
-     
+        // ✅ Paging calculations
+        const totalPages = Math.ceil(this.state.totalCount / pageSize);
+        const currentPage = Math.ceil((position + pageSize) / pageSize);
+        const hasMoreNews = currentPage < totalPages;
 
+        this.setState({ MyNews: filteredData, MyNewsFilterData: filteredData });
+        this.setState({ ExportData: filteredData, FilteredExportData: filteredData });
+
+        // ✅ Update state
+        this.setState({ position: position + 1, totalCount, totalPages, currentPage, hasMoreNews });
+
+        await this.GetNewsGraph();
+      }
     } catch (error) {
-      console.error(error);
+      console.error("GetNews error:", error);
     }
   }
 

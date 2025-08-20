@@ -5,4 +5,5 @@ export interface IPublistatNewsProps {
   hasTeamsContext: boolean;
   userDisplayName: string;
   context: any;
+  siteUrl: string;
 }

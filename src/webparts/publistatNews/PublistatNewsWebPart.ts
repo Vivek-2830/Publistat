@@ -40,7 +40,8 @@ export default class PublistatNewsWebPart extends BaseClientSideWebPart<IPublist
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
-        context: this.context
+        context: this.context,
+        siteUrl : this.context.pageContext.web.absoluteUrl
       }
     );
 
