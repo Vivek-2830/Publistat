@@ -3,7 +3,7 @@
   "solution": {
     "name": "publistat-news-client-side-solution",
     "id": "581f76fd-3d59-4d5f-803e-1a1cebded133",
-    "version": "1.0.0.7",
+    "version": "1.0.0.8",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,

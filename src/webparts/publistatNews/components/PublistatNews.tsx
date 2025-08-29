@@ -1168,15 +1168,19 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
             return evaluateExpression(tagExpr);
           });
         });
+    
         this.setState({ MyNews: filteredData, MyNewsFilterData: filteredData, pagedItems: items, });
         this.setState({ ExportData: filteredData, FilteredExportData: filteredData });
+
+        if(filteredData.length < 20 && items.hasNext) {
+          this.LoadMoreNews(); 
+        }
 
         await this.GetNewsGraph();
       }
     } catch (error) {
       console.error(error);
     }
-
 
   }
 
@@ -1355,7 +1359,7 @@ export default class PublistatNews extends React.Component<IPublistatNewsProps, 
 
         console.log(nextPage.results);
         await this.GetNewsGraph();
-
+       
       }
     } catch (error) {
       console.error(error);
